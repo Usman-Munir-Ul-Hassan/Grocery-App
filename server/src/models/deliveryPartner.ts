@@ -1,5 +1,6 @@
 import mongoose, { Schema } from "mongoose";
 import { userSchema, UserRole, IUser } from "./user";
+import { hashPassword } from "../utils/password";
 
 export interface ILiveLocation {
   latitude: number;
@@ -40,6 +41,15 @@ export const deliveryPartnerSchema = new Schema(
   },
   { timestamps: true }
 );
+
+// Mongoose pre-save hook: Automatically hash password if newly created or modified
+deliveryPartnerSchema.pre("save", async function (next) {
+  if (!this.isModified("password")) {
+    return next();
+  }
+  this.password = await hashPassword(this.password);
+  next();
+});
 
 export const DeliveryPartner = mongoose.model<IDeliveryPartner>(
   "DeliveryPartner",

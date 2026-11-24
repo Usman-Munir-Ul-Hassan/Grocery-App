@@ -1,9 +1,10 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { sendResponse, sendError } from "../utils/responseHandler";
-import { generateTokens, verifyRefreshToken, verifyAccessToken } from "../utils/token";
+import { generateTokens, verifyRefreshToken } from "../utils/token";
 import {
   findCustomerByPhone,
-  createNewCustomer,
+  findCustomerByEmail,
+  registerNewCustomer,
   findDeliveryPartnerByEmail,
   findAdminByEmail,
   checkUserIsActive,
@@ -33,23 +34,71 @@ function setAuthCookies(
   });
 }
 
-// Customer Login: Logs in with phone number (creates account if first time)
-export async function loginCustomer(
-  request: FastifyRequest<{ Body: { phone: string; email?: string; username?: string } }>,
+// Customer Register: Registers a new customer with real phone, email, and username
+export async function registerCustomer(
+  request: FastifyRequest<{ Body: { phone: string; email: string; username: string } }>,
   reply: FastifyReply
 ) {
   try {
     const { phone, email, username } = request.body || {};
 
+    if (!phone || !email || !username) {
+      return sendError(reply, 400, "Phone number, email, and username are all required");
+    }
+
+    // 1. Ensure phone number is new and unique
+    const existingPhone = await findCustomerByPhone(phone);
+    if (existingPhone) {
+      return sendError(reply, 400, "This phone number is already registered. Please login.");
+    }
+
+    // 2. Ensure email address is new and unique
+    const existingEmail = await findCustomerByEmail(email);
+    if (existingEmail) {
+      return sendError(reply, 400, "This email is already registered. Please use another email.");
+    }
+
+    // 3. Save the real customer in MongoDB
+    const customer = await registerNewCustomer(phone, email, username);
+
+    const tokens = generateTokens(customer);
+
+    // Set secure httpOnly cookies
+    setAuthCookies(reply, tokens);
+
+    return sendResponse(reply, 201, "Customer registered successfully", {
+      user: customer,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    request.log.error(`[auth.controller.registerCustomer] -> ${errorMessage}`);
+    return sendError(reply, 500, "Failed to register customer", error);
+  }
+}
+
+// Customer Login: Only logs in existing customers using their phone number
+export async function loginCustomer(
+  request: FastifyRequest<{ Body: { phone: string } }>,
+  reply: FastifyReply
+) {
+  try {
+    const { phone } = request.body || {};
+
     if (!phone) {
       return sendError(reply, 400, "Phone number is required");
     }
 
-    let customer = await findCustomerByPhone(phone);
+    const customer = await findCustomerByPhone(phone);
 
-    // If customer doesn't exist yet, create them automatically
+    // Do NOT auto-create customer. If not found, tell them to register!
     if (!customer) {
-      customer = await createNewCustomer(phone, email, username);
+      return sendError(
+        reply,
+        404,
+        "Customer not found with this phone number. Please register first."
+      );
     }
 
     // Check if account is banned or deactivated
@@ -68,11 +117,13 @@ export async function loginCustomer(
       refreshToken: tokens.refreshToken,
     });
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    request.log.error(`[auth.controller.loginCustomer] -> ${errorMessage}`);
     return sendError(reply, 500, "Failed to login customer", error);
   }
 }
 
-// Delivery Partner Login: Logs in with email and password
+// Delivery Partner Login: Logs in with email and password (checked with bcrypt)
 export async function loginDeliveryPartner(
   request: FastifyRequest<{ Body: { email: string; password: string } }>,
   reply: FastifyReply
@@ -90,7 +141,9 @@ export async function loginDeliveryPartner(
       return sendError(reply, 404, "Delivery partner not found");
     }
 
-    if (!verifyPassword(password, deliveryPartner.password)) {
+    const isPasswordCorrect = await verifyPassword(password, deliveryPartner.password);
+
+    if (!isPasswordCorrect) {
       return sendError(reply, 400, "Invalid email or password");
     }
 
@@ -109,11 +162,13 @@ export async function loginDeliveryPartner(
       refreshToken: tokens.refreshToken,
     });
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    request.log.error(`[auth.controller.loginDeliveryPartner] -> ${errorMessage}`);
     return sendError(reply, 500, "Failed to login delivery partner", error);
   }
 }
 
-// Admin Login: Logs in with email and password
+// Admin Login: Logs in with email and password (checked with bcrypt)
 export async function loginAdmin(
   request: FastifyRequest<{ Body: { email: string; password: string } }>,
   reply: FastifyReply
@@ -131,7 +186,9 @@ export async function loginAdmin(
       return sendError(reply, 404, "Admin account not found");
     }
 
-    if (!verifyPassword(password, admin.password)) {
+    const isPasswordCorrect = await verifyPassword(password, admin.password);
+
+    if (!isPasswordCorrect) {
       return sendError(reply, 400, "Invalid email or password");
     }
 
@@ -150,6 +207,8 @@ export async function loginAdmin(
       refreshToken: tokens.refreshToken,
     });
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    request.log.error(`[auth.controller.loginAdmin] -> ${errorMessage}`);
     return sendError(reply, 500, "Failed to login admin", error);
   }
 }
@@ -160,7 +219,6 @@ export async function refreshTokenHandler(
   reply: FastifyReply
 ) {
   try {
-    // Read from cookies first, fallback to request body
     const refreshToken =
       request.cookies.refreshToken || request.body?.refreshToken;
 
@@ -201,6 +259,8 @@ export async function refreshTokenHandler(
       accessToken: newTokens.accessToken,
     });
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    request.log.error(`[auth.controller.refreshTokenHandler] -> ${errorMessage}`);
     return sendError(reply, 500, "Failed to refresh token", error);
   }
 }
@@ -213,7 +273,6 @@ export async function getUserDetails(
   try {
     const { userId, role } = request.user!;
 
-    // Look up user in MongoDB
     const user = await findUserByIdAndRole(userId, role);
 
     if (!user) {

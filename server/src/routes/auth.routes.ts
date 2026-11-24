@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyPluginOptions } from "fastify";
 import {
+  registerCustomer,
   loginCustomer,
   loginDeliveryPartner,
   loginAdmin,
@@ -15,6 +16,9 @@ export async function authRoutes(
 ) {
   // Get current logged-in user profile (Protected)
   fastify.get("/user", { preHandler: [verifyAuth] }, getUserDetails);
+
+  // Customer registration (Phone, Email, Username)
+  fastify.post("/customer/register", registerCustomer);
 
   // Customer login (Phone based)
   fastify.post("/customer/login", loginCustomer);
