@@ -8,6 +8,7 @@ import {
   findAdminByEmail,
   checkUserIsActive,
   verifyPassword,
+  findUserByIdAndRole,
 } from "../services/auth.service";
 
 // Customer Login: Logs in with phone number (creates account if first time)
@@ -140,11 +141,20 @@ export async function refreshTokenHandler(
       return sendError(reply, 401, "Invalid or expired refresh token. Please login again.");
     }
 
-    // Generate fresh tokens using the decoded user identity
-    const newTokens = generateTokens({
-      _id: decoded.userId,
-      role: decoded.role,
-    });
+    // Check MongoDB: Confirm user still exists in their specific collection
+    const user = await findUserByIdAndRole(decoded.userId, decoded.role);
+
+    if (!user) {
+      return sendError(reply, 404, "User account no longer exists");
+    }
+
+    // Check MongoDB: Confirm user is not banned
+    if (!checkUserIsActive(user)) {
+      return sendError(reply, 403, "Your account is deactivated. Please contact support.");
+    }
+
+    // Generate fresh tokens using the verified user
+    const newTokens = generateTokens(user);
 
     return sendResponse(reply, 200, "Token refreshed successfully", {
       accessToken: newTokens.accessToken,

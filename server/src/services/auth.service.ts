@@ -40,3 +40,20 @@ export async function findDeliveryPartnerByEmail(email: string) {
 export async function findAdminByEmail(email: string) {
   return await Admin.findOne({ email: email });
 }
+
+// Find a user in their specific collection using their ID and role
+export async function findUserByIdAndRole(userId: string, role: string) {
+  if (role === UserRole.CUSTOMER) {
+    return await Customer.findById(userId);
+  }
+
+  if (role === UserRole.DELIVERY_PARTNER) {
+    return await DeliveryPartner.findById(userId);
+  }
+
+  if (role === UserRole.ADMIN) {
+    return await Admin.findById(userId);
+  }
+
+  return null;
+}
