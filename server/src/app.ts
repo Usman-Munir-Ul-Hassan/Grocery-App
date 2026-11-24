@@ -2,6 +2,7 @@ import Fastify from "fastify";
 import { PORT, MONGODB_URI } from "./config/config";
 import connectDB from "./config/connectDB";
 import { sendResponse, sendError } from "./utils/responseHandler";
+import { authRoutes } from "./routes/auth.routes";
 
 const app = Fastify({
   logger: {
@@ -20,6 +21,9 @@ const app = Fastify({
 app.get("/", async (_request, reply) => {
   return sendResponse(reply, 200, "Grocery App API is running");
 });
+
+// Register authentication routes
+app.register(authRoutes, { prefix: "/api/auth" });
 
 // Universal 404 handler for unmatched routes
 app.setNotFoundHandler((request, reply) => {

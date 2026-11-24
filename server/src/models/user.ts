@@ -11,6 +11,7 @@ export interface IUser extends Document {
   email: string;
   role: UserRole;
   isActivated: boolean;
+  clerkId?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -37,6 +38,11 @@ export const userSchema = new Schema(
     isActivated: {
       type: Boolean,
       default: true,
+    },
+    clerkId: {
+      type: String,
+      sparse: true,
+      trim: true,
     },
   },
   { timestamps: true }
