@@ -4,6 +4,7 @@ import {
   loginDeliveryPartner,
   loginAdmin,
   refreshTokenHandler,
+  getUserDetails,
 } from "../controllers/auth.controller";
 
 // Fastify plugin defining all authentication endpoints
@@ -11,6 +12,9 @@ export async function authRoutes(
   fastify: FastifyInstance,
   _options: FastifyPluginOptions
 ) {
+  // Get current logged-in user profile
+  fastify.get("/user", getUserDetails);
+
   // Customer login (Phone based)
   fastify.post("/customer/login", loginCustomer);
 

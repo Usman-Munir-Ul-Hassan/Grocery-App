@@ -1,6 +1,6 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { sendResponse, sendError } from "../utils/responseHandler";
-import { generateTokens, verifyRefreshToken } from "../utils/token";
+import { generateTokens, verifyRefreshToken, verifyAccessToken } from "../utils/token";
 import {
   findCustomerByPhone,
   createNewCustomer,
@@ -161,5 +161,48 @@ export async function refreshTokenHandler(
     });
   } catch (error) {
     return sendError(reply, 500, "Failed to refresh token", error);
+  }
+}
+
+// Get User Details: Fetches the profile of the currently logged-in user
+export async function getUserDetails(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+  try {
+    const authHeader = request.headers.authorization;
+
+    // Check if the Authorization header was provided
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return sendError(reply, 401, "Access token is required. Please login.");
+    }
+
+    // Extract the token string after "Bearer "
+    const token = authHeader.split(" ")[1];
+    const decoded = verifyAccessToken(token);
+
+    if (!decoded) {
+      return sendError(reply, 401, "Invalid or expired access token. Please login again.");
+    }
+
+    // Look up the user in MongoDB using their decoded ID and role
+    const user = await findUserByIdAndRole(decoded.userId, decoded.role);
+
+    if (!user) {
+      return sendError(reply, 404, "User profile not found");
+    }
+
+    // Ensure the user is not deactivated
+    if (!checkUserIsActive(user)) {
+      return sendError(reply, 403, "Your account is deactivated. Please contact support.");
+    }
+
+    // Convert to plain object and remove password before sending to frontend
+    const userProfile = user.toObject();
+    delete (userProfile as { password?: string }).password;
+
+    return sendResponse(reply, 200, "User details fetched successfully", userProfile);
+  } catch (error) {
+    return sendError(reply, 500, "Failed to fetch user details", error);
   }
 }
