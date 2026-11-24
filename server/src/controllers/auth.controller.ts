@@ -1,6 +1,7 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { sendResponse, sendError } from "../utils/responseHandler";
 import { generateTokens, verifyRefreshToken, verifyAccessToken } from "../utils/token";
+import { Customer, DeliveryPartner, UserRole } from "../models";
 import {
   findCustomerByPhone,
   createNewCustomer,
@@ -205,40 +206,24 @@ export async function refreshTokenHandler(
   }
 }
 
-// Get User Details: Fetches profile using cookie (or Bearer header)
+// Get User Details: Fetches the profile of the verified user (via verifyAuth middleware)
 export async function getUserDetails(
   request: FastifyRequest,
   reply: FastifyReply
 ) {
   try {
-    // Read token from cookie first, fallback to Authorization header
-    let token = request.cookies.accessToken;
-
-    if (!token && request.headers.authorization) {
-      const authHeader = request.headers.authorization;
-      if (authHeader.startsWith("Bearer ")) {
-        token = authHeader.split(" ")[1];
-      }
-    }
-
-    if (!token) {
-      return sendError(reply, 401, "Access token is required. Please login.");
-    }
-
-    const decoded = verifyAccessToken(token);
-
-    if (!decoded) {
-      return sendError(reply, 401, "Invalid or expired access token. Please login again.");
-    }
+    const { userId, role } = request.user!;
 
     // Look up user in MongoDB
-    const user = await findUserByIdAndRole(decoded.userId, decoded.role);
+    const user = await findUserByIdAndRole(userId, role);
 
     if (!user) {
+      request.log.warn(`[auth.controller.getUserDetails] -> User not found: ${userId}`);
       return sendError(reply, 404, "User profile not found");
     }
 
     if (!checkUserIsActive(user)) {
+      request.log.warn(`[auth.controller.getUserDetails] -> Deactivated user: ${userId}`);
       return sendError(reply, 403, "Your account is deactivated. Please contact support.");
     }
 
@@ -248,6 +233,51 @@ export async function getUserDetails(
 
     return sendResponse(reply, 200, "User details fetched successfully", userProfile);
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    request.log.error(`[auth.controller.getUserDetails] -> ${errorMessage}`);
     return sendError(reply, 500, "Failed to fetch user details", error);
+  }
+}
+
+// Update User: Updates profile fields or delivery partner's liveLocation
+export async function updateUser(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+  try {
+    const { userId, role } = request.user!;
+
+    // Choose the right collection based on the user's role
+    let UserModel;
+    if (role === UserRole.CUSTOMER) {
+      UserModel = Customer;
+    } else if (role === UserRole.DELIVERY_PARTNER) {
+      UserModel = DeliveryPartner;
+    } else {
+      request.log.warn(`[auth.controller.updateUser] -> Invalid role for update: ${role}`);
+      return sendError(reply, 400, "Invalid user role for update");
+    }
+
+    // Update in MongoDB and return the updated document
+    const updatedUser = await UserModel.findByIdAndUpdate(
+      userId,
+      { $set: request.body },
+      { new: true }
+    );
+
+    if (!updatedUser) {
+      request.log.warn(`[auth.controller.updateUser] -> User not found for update: ${userId}`);
+      return sendError(reply, 404, "User not found");
+    }
+
+    // Remove password before returning
+    const userProfile = updatedUser.toObject();
+    delete (userProfile as { password?: string }).password;
+
+    return sendResponse(reply, 200, "User updated successfully", userProfile);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    request.log.error(`[auth.controller.updateUser] -> ${errorMessage}`);
+    return sendError(reply, 500, "Failed to update user", error);
   }
 }
