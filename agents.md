@@ -48,5 +48,13 @@ This document defines the strict development rules, architectural standards, and
 - Implement structured error handling across the app (`try/catch`, validation, fallback states).
 - Use clear, descriptive logging for runtime events and errors so that issues can be diagnosed easily by both humans and AI models.
 
-## 9. Strict Adherence
+## 9. Simple, Beginner-Friendly Code Standards
+- **Simple Naming**: Use clear, self-explanatory names like `user`, `errorMessage`, `deliveryPartner` (avoid cryptic abbreviations like `cfg`, `tmp`, `dp`).
+- **One Function, One Job**: Keep functions short and focused on doing one thing well.
+- **Basic TypeScript**: Avoid complex generics, conditional types, or nested utility types unless truly needed. Keep types straightforward.
+- **Plain English Comments**: Add a short comment above each function explaining what it does in simple words.
+- **Simple Over Clever**: If there is a simple way and a complex/clever way, always pick the simple way.
+- **Beginner-Friendly Explanation**: After writing or modifying code, provide a brief 3–4 line explanation in plain English.
+
+## 10. Strict Adherence
 - These rules must never be bypassed or violated under any circumstances.

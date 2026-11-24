@@ -33,3 +33,7 @@ Every file must have a single responsibility. Code must be organized cleanly int
   - Location (`[FileName.functionName]`)
   - Clear, human-readable reason
 - Do not let unhandled promise rejections crash the server silently.
+
+## 6. Beginner-Friendly Code & Explanations
+- Follow all beginner-friendly code standards from root `agents.md` (simple naming, short functions, simple TypeScript, plain English comments).
+- Always explain newly written backend code in 3–4 simple lines.
