@@ -11,6 +11,28 @@ import {
   findUserByIdAndRole,
 } from "../services/auth.service";
 
+// Set httpOnly cookies for access and refresh tokens
+function setAuthCookies(
+  reply: FastifyReply,
+  tokens: { accessToken: string; refreshToken: string }
+) {
+  // Access token cookie (expires in 1 day)
+  reply.setCookie("accessToken", tokens.accessToken, {
+    path: "/",
+    httpOnly: true,
+    sameSite: "lax",
+    maxAge: 24 * 60 * 60,
+  });
+
+  // Refresh token cookie (expires in 7 days)
+  reply.setCookie("refreshToken", tokens.refreshToken, {
+    path: "/",
+    httpOnly: true,
+    sameSite: "lax",
+    maxAge: 7 * 24 * 60 * 60,
+  });
+}
+
 // Customer Login: Logs in with phone number (creates account if first time)
 export async function loginCustomer(
   request: FastifyRequest<{ Body: { phone: string; email?: string; username?: string } }>,
@@ -36,6 +58,9 @@ export async function loginCustomer(
     }
 
     const tokens = generateTokens(customer);
+
+    // Set secure httpOnly cookies
+    setAuthCookies(reply, tokens);
 
     return sendResponse(reply, 200, "Login successful", {
       user: customer,
@@ -75,6 +100,9 @@ export async function loginDeliveryPartner(
 
     const tokens = generateTokens(deliveryPartner);
 
+    // Set secure httpOnly cookies
+    setAuthCookies(reply, tokens);
+
     return sendResponse(reply, 200, "Login successful", {
       user: deliveryPartner,
       accessToken: tokens.accessToken,
@@ -113,6 +141,9 @@ export async function loginAdmin(
 
     const tokens = generateTokens(admin);
 
+    // Set secure httpOnly cookies
+    setAuthCookies(reply, tokens);
+
     return sendResponse(reply, 200, "Login successful", {
       user: admin,
       accessToken: tokens.accessToken,
@@ -123,13 +154,15 @@ export async function loginAdmin(
   }
 }
 
-// Refresh Token: Exchanges an active refresh token for a brand new access token
+// Refresh Token: Reads cookie (or body) and returns a new access token
 export async function refreshTokenHandler(
-  request: FastifyRequest<{ Body: { refreshToken: string } }>,
+  request: FastifyRequest<{ Body?: { refreshToken?: string } }>,
   reply: FastifyReply
 ) {
   try {
-    const { refreshToken } = request.body || {};
+    // Read from cookies first, fallback to request body
+    const refreshToken =
+      request.cookies.refreshToken || request.body?.refreshToken;
 
     if (!refreshToken) {
       return sendError(reply, 400, "Refresh token is required");
@@ -156,6 +189,14 @@ export async function refreshTokenHandler(
     // Generate fresh tokens using the verified user
     const newTokens = generateTokens(user);
 
+    // Update the accessToken cookie
+    reply.setCookie("accessToken", newTokens.accessToken, {
+      path: "/",
+      httpOnly: true,
+      sameSite: "lax",
+      maxAge: 24 * 60 * 60,
+    });
+
     return sendResponse(reply, 200, "Token refreshed successfully", {
       accessToken: newTokens.accessToken,
     });
@@ -164,40 +205,44 @@ export async function refreshTokenHandler(
   }
 }
 
-// Get User Details: Fetches the profile of the currently logged-in user
+// Get User Details: Fetches profile using cookie (or Bearer header)
 export async function getUserDetails(
   request: FastifyRequest,
   reply: FastifyReply
 ) {
   try {
-    const authHeader = request.headers.authorization;
+    // Read token from cookie first, fallback to Authorization header
+    let token = request.cookies.accessToken;
 
-    // Check if the Authorization header was provided
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    if (!token && request.headers.authorization) {
+      const authHeader = request.headers.authorization;
+      if (authHeader.startsWith("Bearer ")) {
+        token = authHeader.split(" ")[1];
+      }
+    }
+
+    if (!token) {
       return sendError(reply, 401, "Access token is required. Please login.");
     }
 
-    // Extract the token string after "Bearer "
-    const token = authHeader.split(" ")[1];
     const decoded = verifyAccessToken(token);
 
     if (!decoded) {
       return sendError(reply, 401, "Invalid or expired access token. Please login again.");
     }
 
-    // Look up the user in MongoDB using their decoded ID and role
+    // Look up user in MongoDB
     const user = await findUserByIdAndRole(decoded.userId, decoded.role);
 
     if (!user) {
       return sendError(reply, 404, "User profile not found");
     }
 
-    // Ensure the user is not deactivated
     if (!checkUserIsActive(user)) {
       return sendError(reply, 403, "Your account is deactivated. Please contact support.");
     }
 
-    // Convert to plain object and remove password before sending to frontend
+    // Remove password before sending to frontend
     const userProfile = user.toObject();
     delete (userProfile as { password?: string }).password;
 

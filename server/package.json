@@ -9,6 +9,7 @@
     "start": "tsx src/app.ts"
   },
   "dependencies": {
+    "@fastify/cookie": "^11.1.5",
     "dotenv": "^18.0.10",
     "fastify": "^4.29.1",
     "fastify-socket.io": "^5.1.0",

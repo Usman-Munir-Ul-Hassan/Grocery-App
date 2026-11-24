@@ -1,8 +1,11 @@
 import Fastify from "fastify";
-import { PORT, MONGODB_URI } from "./config/config";
+import fastifyCookie from "@fastify/cookie";
+import { PORT, MONGODB_URI, COOKIE_SESSION } from "./config/config";
 import connectDB from "./config/connectDB";
 import { sendResponse, sendError } from "./utils/responseHandler";
 import { authRoutes } from "./routes/auth.routes";
+import { categoryRoutes } from "./routes/category.routes";
+import { productRoutes } from "./routes/product.routes";
 
 const app = Fastify({
   logger: {
@@ -17,13 +20,20 @@ const app = Fastify({
   },
 });
 
-// Health check route using universal response handler
+// Register Cookie plugin for httpOnly authentication cookies
+app.register(fastifyCookie, {
+  secret: COOKIE_SESSION,
+});
+
+// Health check route
 app.get("/", async (_request, reply) => {
   return sendResponse(reply, 200, "Grocery App API is running");
 });
 
-// Register authentication routes
+// Register application routes
 app.register(authRoutes, { prefix: "/api/auth" });
+app.register(categoryRoutes, { prefix: "/api/categories" });
+app.register(productRoutes, { prefix: "/api/products" });
 
 // Universal 404 handler for unmatched routes
 app.setNotFoundHandler((request, reply) => {
