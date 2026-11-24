@@ -5,7 +5,6 @@ import {
   loginAdmin,
   refreshTokenHandler,
   getUserDetails,
-  updateUser,
 } from "../controllers/auth.controller";
 import { verifyAuth } from "../middleware/auth.middleware";
 
@@ -16,9 +15,6 @@ export async function authRoutes(
 ) {
   // Get current logged-in user profile (Protected)
   fastify.get("/user", { preHandler: [verifyAuth] }, getUserDetails);
-
-  // Update user profile or liveLocation (Protected)
-  fastify.patch("/user", { preHandler: [verifyAuth] }, updateUser);
 
   // Customer login (Phone based)
   fastify.post("/customer/login", loginCustomer);

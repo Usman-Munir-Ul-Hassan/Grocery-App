@@ -6,6 +6,7 @@ import { sendResponse, sendError } from "./utils/responseHandler";
 import { authRoutes } from "./routes/auth.routes";
 import { categoryRoutes } from "./routes/category.routes";
 import { productRoutes } from "./routes/product.routes";
+import { trackingRoutes } from "./routes/tracking.routes";
 
 const app = Fastify({
   logger: {
@@ -34,6 +35,8 @@ app.get("/", async (_request, reply) => {
 app.register(authRoutes, { prefix: "/api/auth" });
 app.register(categoryRoutes, { prefix: "/api/categories" });
 app.register(productRoutes, { prefix: "/api/products" });
+app.register(trackingRoutes, { prefix: "/api" });
+app.register(trackingRoutes, { prefix: "/api/tracking" });
 
 // Universal 404 handler for unmatched routes
 app.setNotFoundHandler((request, reply) => {

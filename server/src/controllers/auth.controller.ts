@@ -1,7 +1,6 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { sendResponse, sendError } from "../utils/responseHandler";
 import { generateTokens, verifyRefreshToken, verifyAccessToken } from "../utils/token";
-import { Customer, DeliveryPartner, UserRole } from "../models";
 import {
   findCustomerByPhone,
   createNewCustomer,
@@ -236,48 +235,5 @@ export async function getUserDetails(
     const errorMessage = error instanceof Error ? error.message : String(error);
     request.log.error(`[auth.controller.getUserDetails] -> ${errorMessage}`);
     return sendError(reply, 500, "Failed to fetch user details", error);
-  }
-}
-
-// Update User: Updates profile fields or delivery partner's liveLocation
-export async function updateUser(
-  request: FastifyRequest,
-  reply: FastifyReply
-) {
-  try {
-    const { userId, role } = request.user!;
-
-    // Choose the right collection based on the user's role
-    let UserModel;
-    if (role === UserRole.CUSTOMER) {
-      UserModel = Customer;
-    } else if (role === UserRole.DELIVERY_PARTNER) {
-      UserModel = DeliveryPartner;
-    } else {
-      request.log.warn(`[auth.controller.updateUser] -> Invalid role for update: ${role}`);
-      return sendError(reply, 400, "Invalid user role for update");
-    }
-
-    // Update in MongoDB and return the updated document
-    const updatedUser = await UserModel.findByIdAndUpdate(
-      userId,
-      { $set: request.body },
-      { new: true }
-    );
-
-    if (!updatedUser) {
-      request.log.warn(`[auth.controller.updateUser] -> User not found for update: ${userId}`);
-      return sendError(reply, 404, "User not found");
-    }
-
-    // Remove password before returning
-    const userProfile = updatedUser.toObject();
-    delete (userProfile as { password?: string }).password;
-
-    return sendResponse(reply, 200, "User updated successfully", userProfile);
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    request.log.error(`[auth.controller.updateUser] -> ${errorMessage}`);
-    return sendError(reply, 500, "Failed to update user", error);
   }
 }
