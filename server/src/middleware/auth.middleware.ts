@@ -1,6 +1,7 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { verifyAccessToken } from "../utils/token";
 import { sendError } from "../utils/responseHandler";
+import { findUserByIdAndRole, checkUserIsActive } from "../services/auth.service";
 
 // Tell TypeScript that FastifyRequest has our custom user object
 declare module "fastify" {
@@ -12,7 +13,7 @@ declare module "fastify" {
   }
 }
 
-// Middleware: Verifies accessToken from cookies or Authorization header
+// Middleware 1: Verifies token, checks user exists in DB, and blocks banned users
 export async function verifyAuth(
   request: FastifyRequest,
   reply: FastifyReply
@@ -28,7 +29,7 @@ export async function verifyAuth(
       }
     }
 
-    // 2. If no token was found, reject and log warning
+    // 2. Reject if no token found
     if (!token) {
       request.log.warn(
         `[auth.middleware.verifyAuth] -> Missing token on protected route: ${request.url}`
@@ -36,7 +37,7 @@ export async function verifyAuth(
       return sendError(reply, 401, "Authentication required. Please login.");
     }
 
-    // 3. Verify the token signature and expiration
+    // 3. Verify token signature and expiration
     const decoded = verifyAccessToken(token);
 
     if (!decoded) {
@@ -46,7 +47,25 @@ export async function verifyAuth(
       return sendError(reply, 401, "Invalid or expired access token. Please login again.");
     }
 
-    // 4. Attach decoded user identity to request object for controllers to use
+    // 4. Check MongoDB: Ensure user still exists
+    const user = await findUserByIdAndRole(decoded.userId, decoded.role);
+
+    if (!user) {
+      request.log.warn(
+        `[auth.middleware.verifyAuth] -> User no longer exists in DB: ${decoded.userId}`
+      );
+      return sendError(reply, 404, "User account no longer exists");
+    }
+
+    // 5. Check MongoDB: Ensure user is NOT banned
+    if (!checkUserIsActive(user)) {
+      request.log.warn(
+        `[auth.middleware.verifyAuth] -> Blocked banned/deactivated user: ${decoded.userId}`
+      );
+      return sendError(reply, 403, "Your account has been deactivated. Please contact support.");
+    }
+
+    // 6. Attach user info to request object
     request.user = {
       userId: decoded.userId,
       role: decoded.role,
@@ -58,4 +77,23 @@ export async function verifyAuth(
     );
     return sendError(reply, 500, "Authentication verification failed");
   }
+}
+
+// Middleware 2: Role Authorization Guard (Checks if user has required role)
+export function authorizeRoles(allowedRoles: string[]) {
+  return async function (request: FastifyRequest, reply: FastifyReply) {
+    const userRole = request.user?.role;
+
+    // Check if user's role is in the allowed list
+    if (!userRole || !allowedRoles.includes(userRole)) {
+      request.log.warn(
+        `[auth.middleware.authorizeRoles] -> Denied access to user [${request.user?.userId}] with role [${userRole}]. Required: ${allowedRoles.join(", ")}`
+      );
+      return sendError(
+        reply,
+        403,
+        `Access denied. This action requires one of the following roles: ${allowedRoles.join(", ")}`
+      );
+    }
+  };
 }

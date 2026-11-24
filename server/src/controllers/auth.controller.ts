@@ -217,13 +217,7 @@ export async function getUserDetails(
     const user = await findUserByIdAndRole(userId, role);
 
     if (!user) {
-      request.log.warn(`[auth.controller.getUserDetails] -> User not found: ${userId}`);
       return sendError(reply, 404, "User profile not found");
-    }
-
-    if (!checkUserIsActive(user)) {
-      request.log.warn(`[auth.controller.getUserDetails] -> Deactivated user: ${userId}`);
-      return sendError(reply, 403, "Your account is deactivated. Please contact support.");
     }
 
     // Remove password before sending to frontend
