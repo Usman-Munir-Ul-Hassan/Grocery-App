@@ -1,62 +1,51 @@
 import type { FastifyReply } from "fastify";
 
-export interface ApiResponse<T = unknown> {
+// The shape of every response we send back from the API
+export interface ApiResponse {
   success: boolean;
   message: string;
-  data?: T;
+  data?: any;
   error?: string;
 }
 
-/**
- * Send a standardized success response
- *
- * @param reply FastifyReply instance
- * @param statusCode HTTP status code (e.g., 200, 201)
- * @param message Human-readable message
- * @param data Optional payload data
- */
-export const sendResponse = <T>(
+// Send a success response
+export function sendResponse(
   reply: FastifyReply,
   statusCode: number,
   message: string,
-  data?: T
-): FastifyReply => {
-  const responseBody: ApiResponse<T> = {
+  data?: any
+) {
+  const body: ApiResponse = {
     success: true,
-    message,
-    ...(data !== undefined ? { data } : {}),
+    message: message,
   };
 
-  return reply.status(statusCode).send(responseBody);
-};
+  // Only attach data if it was provided
+  if (data !== undefined) {
+    body.data = data;
+  }
 
-/**
- * Send a standardized error response
- *
- * @param reply FastifyReply instance
- * @param statusCode HTTP status code (e.g., 400, 401, 403, 404, 500)
- * @param message Human-readable error summary
- * @param error Optional error object, string, or details
- */
-export const sendError = (
+  return reply.status(statusCode).send(body);
+}
+
+// Send an error response
+export function sendError(
   reply: FastifyReply,
   statusCode: number,
   message: string,
   error?: unknown
-): FastifyReply => {
-  let errorMessage: string | undefined;
-
-  if (error instanceof Error) {
-    errorMessage = error.message;
-  } else if (typeof error === "string") {
-    errorMessage = error;
-  }
-
-  const responseBody: ApiResponse = {
+) {
+  const body: ApiResponse = {
     success: false,
-    message,
-    ...(errorMessage ? { error: errorMessage } : {}),
+    message: message,
   };
 
-  return reply.status(statusCode).send(responseBody);
-};
+  // Convert the error into plain text if present
+  if (error instanceof Error) {
+    body.error = error.message;
+  } else if (typeof error === "string") {
+    body.error = error;
+  }
+
+  return reply.status(statusCode).send(body);
+}
